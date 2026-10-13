@@ -1,0 +1,54 @@
+/**
+ * Client half of dsh-sidechat: the side-chat tabs (Workitem 01) and the
+ * selection annotations (Workitem 02).
+ *
+ * 双模（Workitem_05）：betterSidebar 是 optional peer——
+ * - 宿主 ≥ 0.1.5（有 sidebarRightTabs）：侧聊直连原生右栏（无论 BS 在不在）；
+ * - 宿主 ≤ 0.1.2 + BS < 0.19：legacy 腿（betterSidebar 布局）。
+ * betterSidebar 不在 inject 清单（required 会让无-BS 环境拒绝启动插件）；
+ * 运行时经 directNativeLeg(ctx) 分腿，消费点全部判空。
+ */
+import type { Context } from './host/contracts.ts'
+import { registerCompatibilityStatus } from './diagnostics/index.tsx'
+import { attachLocale, type LocaleServiceLike } from './locales.ts'
+import { createReflowStore } from './reflow.ts'
+import { createAnnotationStore } from './annotations/model.ts'
+import { registerSideChat } from './sidechat/index.tsx'
+import { registerAnnotations } from './annotate/index.tsx'
+import { clearNativeRuntime, setRootContext } from './sidechat/native.ts'
+import { sweepOrphanedSideChatMeta } from './sidechat/metaStore.ts'
+import { migrateTemporarySideChats, temporarySideRegistry, TEMPORARY_SIDE_KEY } from './sidechat/temporary.ts'
+import { installTemporaryWorkspaceRows } from './host/temporaryRows.ts'
+
+export const inject = ['sessions', 'workspaces', 'slots', 'connection', 'locale']
+
+export function apply(ctx: Context): void {
+  // 侧栏 Tab 的原生面（better-sidebar >= 0.19）与宿主调用都要用插件根 ctx：
+  // 面板拿到的是 slot 注入的收缩 ctx（inject 里没有 workspaces），见 native.ts。
+  // fiber 撤销即清场（registry/openings/birthOrder 全模块级，重激活不得带病存活）。
+  ctx.effect(() => {
+    setRootContext(ctx)
+    return () => { clearNativeRuntime() }
+  }, 'dsh-sidechat: native bridge')
+  // 跟随 DSH 通用设置里的语言（locale.preference，Host-backed，实时切换）。
+  attachLocale(ctx.locale as LocaleServiceLike | undefined)
+  registerCompatibilityStatus(ctx)
+  // 撤掉旧页面 meta 的活身份，避免把孤键当仍存活的 tab。宿主真的恢复
+  // tab 时，由其 navigation revision 与挂载记录认领原 child。
+  // Read recovery identities before orphan sweeping removes old active metadata.
+  const temporary = temporarySideRegistry()
+  try { migrateTemporarySideChats(localStorage, temporary) } catch { /* memory-only */ }
+  ctx.effect(() => {
+    const dispose = installTemporaryWorkspaceRows(temporary)
+    const onStorage = (event: StorageEvent) => { if (event.key === TEMPORARY_SIDE_KEY) temporary.refresh() }
+    window.addEventListener('storage', onStorage)
+    return () => { window.removeEventListener('storage', onStorage); dispose() }
+  }, 'dsh-sidechat: temporary workspace rows')
+  sweepOrphanedSideChatMeta()
+  // 回流 store 两个模块共享：sidechat 生产（回流按钮），annotate 消费
+  // （chip + 发送拦截器序列化）。
+  const reflow = createReflowStore()
+  const annotations = createAnnotationStore()
+  registerSideChat(ctx, reflow, annotations)
+  registerAnnotations(ctx, reflow, annotations)
+}

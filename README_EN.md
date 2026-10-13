@@ -1,0 +1,54 @@
+# dsh-sidechat
+
+English · [中文](README.md)
+
+A DSH plugin for independent side chats, selection annotations and sending conclusions back to the main conversation.
+
+## Install
+
+```bash
+dsh plugin --profile web add github:kkisok0123/dsh-sidechat
+```
+
+This repository includes source and prebuilt `lib/` files. GitHub installation requires no compilation on the user's machine. Restart `dsh web` and refresh the window after installation.
+
+If `dsh-sidenote` is already installed, remove it before installing this plugin to avoid duplicate entries:
+
+```bash
+dsh plugin --profile web remove dsh-sidenote
+```
+
+Open a conversation with an existing reply. Click **Side** in its header, or enter `/side` in the composer, to open the plugin in the right sidebar.
+
+## Features
+
+- An independent side conversation forks the main conversation's complete history.
+- On DSH 0.2.0-rc.2, the plugin uses the host's native Conversation Factory for messages, tools, models, permissions and composer. Older hosts use the plugin renderer.
+- The model menu refreshes provider labels and restores composer focus after a model change.
+- Select assistant text and add it to the main conversation or its original side conversation; references stay separate from drafts.
+- Temporary side conversations are hidden from the current browser's session list and can be reopened. Saving creates a separate visible session.
+- Bring side-chat conclusions back as references in the main composer.
+
+This image illustrates the right-sidebar layout. Message and composer appearance vary with host version, theme and native rendering mode. It is separate from the host's floating side-conversation window.
+
+![Right-sidebar layout example](docs/assets/04-side-chat-panel.png)
+
+## Compatibility
+
+The package retains the upstream engine declarations and requires Node.js 20 or later. Native conversation rendering targets DSH **0.2.0-rc.2**. The engine range does not mean that every combination has been verified.
+
+## Development
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check:arch
+pnpm typecheck
+pnpm build
+pnpm check:package
+```
+
+Commit the corresponding `lib/` files whenever source changes. CI rebuilds and checks that generated files match the committed version so direct GitHub installation remains usable.
+
+## Origin and license
+
+Based on [gyixuan's dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote), retaining the original attribution and MIT license. This repository starts from an independent source snapshot without the upstream Git history.

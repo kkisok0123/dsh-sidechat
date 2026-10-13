@@ -1,0 +1,17 @@
+# dsh-sidechat bundle patch
+#
+# `dsh.bundle.patch` layer of the published package: installing through the
+# official CLI —
+#
+#   dsh plugin --profile <name> add dsh-sidechat
+#
+# — appends this single `insert` (one plugin row) to the bundle stack. No
+# manual profile edits.
+#
+# dsh-better-sidebar is an OPTIONAL peer (see peerDependenciesMeta), not a hard
+# dependency: the native leg registers straight against the host's
+# `sidebarRightTabs` service and works on a host with no better-sidebar at all.
+# The frozen legacy leg registers only when better-sidebar >=0.12.0 shows up.
+- insert:
+    - id: side-chat
+      name: 'dsh-sidechat'
