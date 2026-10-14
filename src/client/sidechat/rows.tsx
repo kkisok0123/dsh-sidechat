@@ -14,6 +14,7 @@ import { FoldCard } from '../chat/FoldCard.tsx'
 import type { FoldStore } from '../chat/viewState.ts'
 import { flattenReflowContent, splitProtocolPrefix } from '../annotations/format.ts'
 import { SNAPSHOT_BLOCK_MARK } from './snapshot.ts'
+import { splitBoundaryPrefix, stripSideProtocolBlocks } from '../boundary.ts'
 import { markdownTextProps } from '../host/markdown.ts'
 import type { ReflowStore } from '../reflow.ts'
 import { pairQuestions } from './model.ts'
@@ -83,6 +84,29 @@ function SnapshotCard({ takenAt, text, fold }: { takenAt: string | null; text: s
   )
 }
 
+/** 侧聊边界卡（Codex 对齐）：fork 边界处的可展开提示行——继承历史降级为
+ *  只读参照、本会话是独立侧边助手。协议块原文可查证，默认折叠。 */
+function BoundaryCard({ text, fold }: { text: string; fold: FoldStore }) {
+  useLocaleTick()
+  const rowKey = 'side-boundary'
+  const open = useSyncExternalStore((fn: () => void) => fold.subscribe(fn), () => fold.isOpen(rowKey))
+  return (
+    <div className={css.flowRow}>
+      <DisclosureRow
+        icon={<IconBranchOutline16 size={14} />}
+        title={t('boundaryLabel')}
+        open={open}
+        expandable
+        expandOnRowClick
+        previewChevron
+        onToggle={() => { fold.toggle(rowKey) }}
+      >
+        <div className={css.snapshotBody}><pre className={css.snapshotText}>{text}</pre></div>
+      </DisclosureRow>
+    </div>
+  )
+}
+
 export function MessageList({ messages, fold, boundarySeq, reflow, parentSessionId, sideTitle, onPromote }: {
   messages: readonly ChatMessage[]
   fold: FoldStore
@@ -101,15 +125,23 @@ export function MessageList({ messages, fold, boundarySeq, reflow, parentSession
   const { inherited, fresh } = useMemo(() => partitionInherited(messages, boundarySeq), [messages, boundarySeq])
   // Delivery_04：首条新鲜用户消息的快照前缀块 → 提升到继承卡区域，
   // 气泡只留用户正文。
+  // 侧聊边界（Codex 对齐）：边界块同样提升为边界卡，气泡零污染。
   const snapshotInfo = useMemo(() => {
     const first = fresh.find(m => m.role === 'user')
     if (first === undefined) return null
-    const split = splitSnapshotPrefix(first.text)
-    return split === null ? null : { key: first.key, ...split }
+    let text = first.text
+    const boundary = splitBoundaryPrefix(text)
+    if (boundary !== null) text = boundary.rest
+    const split = splitSnapshotPrefix(text)
+    return split === null && boundary === null ? null : {
+      key: first.key,
+      ...(boundary !== null ? { boundary: boundary.boundary } : {}),
+      ...(split !== null ? { takenAt: split.takenAt, snapshot: split.snapshot } : {}),
+    }
   }, [fresh])
   const renderRow = (message: ChatMessage) => {
     const m = snapshotInfo !== null && message.key === snapshotInfo.key
-      ? { ...message, text: snapshotInfo.rest }
+      ? { ...message, text: stripSideProtocolBlocks(message.text) }
       : message
     return (
       <MessageRow key={m.key} message={m} question={questions.get(m.key)} fold={fold} reflow={reflow} parentSessionId={parentSessionId} sideTitle={sideTitle} />
@@ -174,8 +206,11 @@ export function MessageList({ messages, fold, boundarySeq, reflow, parentSession
           {inherited.map(renderRow)}
         </FoldCard>
       )}
-      {snapshotInfo !== null && (
-        <SnapshotCard takenAt={snapshotInfo.takenAt} text={snapshotInfo.snapshot} fold={fold} />
+      {snapshotInfo?.boundary !== undefined && (
+        <BoundaryCard text={snapshotInfo.boundary} fold={fold} />
+      )}
+      {snapshotInfo?.snapshot !== undefined && (
+        <SnapshotCard takenAt={snapshotInfo.takenAt ?? null} text={snapshotInfo.snapshot} fold={fold} />
       )}
       {fresh.map(renderRow)}
     </div>

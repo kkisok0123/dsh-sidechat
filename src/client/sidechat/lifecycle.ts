@@ -15,6 +15,7 @@ import { sideChatTitleOf } from './identity.ts'
 import { markTemporarySideChat } from './temporary.ts'
 import { contentTextOf } from '../chat/transcript.ts'
 import { SNAPSHOT_BLOCK_MARK } from './snapshot.ts'
+import { BOUNDARY_BLOCK_MARK } from '../boundary.ts'
 
 import { readModelSelection, writeModelSelection } from '../host/models.ts'
 export { projectedModelSelection, remoteSessionFace, readModelSelection, writeModelSelection, readModelName, listModels, switchModel } from '../host/models.ts'
@@ -258,9 +259,10 @@ export function armInheritedTurnPurge(ctx: Context, childId: string, parentSessi
       if (settled) return
       const text = freshUserText()
       if (text === '') return
-      // 用户自己的首条侧边消息带进展快照前缀——绝不误伤（无前缀可判的
+      // 用户自己的首条侧边消息带边界/快照前缀——绝不误伤（无前缀可判的
       // 纯时序形态下，这是区分「遗传 turn」和「用户首个 turn」的关键护栏）。
-      if (text.startsWith(SNAPSHOT_BLOCK_MARK)) { disarm(); return }
+      // 边界块在最前（Codex 对齐后首条消息的组装序：边界 → 快照 → 正文）。
+      if (text.startsWith(BOUNDARY_BLOCK_MARK) || text.startsWith(SNAPSHOT_BLOCK_MARK)) { disarm(); return }
       if (expectedPrefix !== undefined && !text.startsWith(expectedPrefix)) { disarm(); return }
       settled = true
       for (const off of offs) off()
@@ -332,7 +334,7 @@ function reconcileChildQueueAfterCancel(ctx: Context, childId: string, expectedP
         if (typeof item?.id !== 'string') continue
         const text = typeof item.text === 'string' ? item.text : contentTextOf(item.content)
         const isLeak = expectedPrefix !== undefined && text.startsWith(expectedPrefix)
-        const isUserReal = text.startsWith(SNAPSHOT_BLOCK_MARK)
+        const isUserReal = text.startsWith(BOUNDARY_BLOCK_MARK) || text.startsWith(SNAPSHOT_BLOCK_MARK)
         if (!isLeak && !isUserReal) continue
         const itemId = item.id
         const content = item.content
@@ -498,6 +500,7 @@ export function updateTabMeta(ctx: Context, sessionId: string, tabId: string, mu
       ...(next.forkedMidTurn === true ? { forkedMidTurn: true } : {}),
       ...(next.snapshotOnly === true ? { snapshotOnly: true } : {}),
       ...(next.leakedPromptPrefix !== undefined ? { leakedPromptPrefix: next.leakedPromptPrefix } : {}),
+      ...(next.boundaryDelivered === true ? { boundaryDelivered: true } : {}),
       ...(next.inheritedPurged === true ? { inheritedPurged: true } : {}),
       ...(next.topic !== undefined ? { topic: next.topic } : {}),
       number: direct.number,

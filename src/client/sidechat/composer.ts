@@ -66,13 +66,15 @@ export interface Composer {
  * 降级路径：草稿住本地 state，发送直连 session.prompt([...], 'queue')，
  * 失败时回填草稿并报错。
  *
- * firstSendPrefix：提交时获取主线进展快照；真实接受后才由 onAccepted 消费。
- * 失败时剥离临时前缀，保留正文与待发注释。
+ * firstBoundaryBlock（Codex 对齐）：首条消息的侧聊边界协议块（继承历史
+ * 只读参照 + 侧边助手策略）——一次性，接受后由 onAccepted 消费。
+ * firstSendPrefix：busy fork 的主线进展快照；同样一次性、真实接受后才
+ * 由 onAccepted 消费。失败时剥离临时前缀，保留正文与待发注释。
  *
  * onSubmitText（Delivery_05 内容身份）：每次 submit 拿到干净 body（不含
  * 快照前缀），供面板捕获首条消息主题为 topic；是否首条的判定归调用方。
  */
-export function useComposer(ctx: Context, session: SessionFace | undefined, childId: string | undefined, options?: { annotations?: AnnotationStore; firstSendPrefix?: () => string | null; onSubmitText?: (body: string) => void; onAccepted?: () => void }): Composer {
+export function useComposer(ctx: Context, session: SessionFace | undefined, childId: string | undefined, options?: { annotations?: AnnotationStore; firstBoundaryBlock?: () => string | null; firstSendPrefix?: () => string | null; onSubmitText?: (body: string) => void; onAccepted?: () => void }): Composer {
   const diagnostics = hostDiagnostics(ctx)
   const hostState = useSyncExternalStore(diagnostics.subscribe, diagnostics.getSnapshot)
   // 同一 child 的 retained Session 就绪后必须重解析，避免把初次缺席缓存为永久降级。
@@ -168,15 +170,20 @@ export function useComposer(ctx: Context, session: SessionFace | undefined, chil
     const active = childId === undefined ? [] : store?.listActive(childId) ?? []
     if (childId !== undefined && store?.getSubmission(childId).pending === true) return
     if (body === '' && active.length === 0 && (input === null || inputAttachmentIds(input).length === 0)) return
-    const prefix = options?.firstSendPrefix?.() ?? null
-    const text = prefix === null ? body : `${prefix}\n\n${body}`
+    // 侧聊边界（Codex 对齐）：首条消息拼边界协议块（继承历史降级为只读
+    // 参照 + 侧边助手策略），之后再拼主线进展快照（busy fork 时）。两者
+    // 都是一次性——真实接受后由 onAccepted 消费，失败剥离保留正文。
+    const boundary = childId !== undefined && options?.firstBoundaryBlock !== undefined ? options.firstBoundaryBlock() : null
+    const snapshot = options?.firstSendPrefix?.() ?? null
+    const prefix = [boundary, snapshot].filter(part => part !== null).join('\n\n')
+    const text = prefix === '' ? body : `${prefix}\n\n${body}`
     if (input !== null && localDraft !== '') { setSendError(t('draftRecoveryConflict')); return }
     if (input !== null) {
-      if (store !== undefined && childId !== undefined && (active.length > 0 || prefix !== null)) {
+      if (store !== undefined && childId !== undefined && (active.length > 0 || prefix !== '')) {
         const target = childId
         store.setSubmission(target, { pending: true })
         setSendError(null)
-        void submitAnnotations({ ctx, store, sessionId: target, input, annotations: active, leadingBlocks: prefix === null ? [] : [prefix], mode }).then(accepted => {
+        void submitAnnotations({ ctx, store, sessionId: target, input, annotations: active, leadingBlocks: prefix === '' ? [] : [prefix], mode }).then(accepted => {
           const status = store.getSubmission(target)
           store.setSubmission(target, { ...status, pending: false })
           if (accepted) { options?.onSubmitText?.(body); options?.onAccepted?.() }

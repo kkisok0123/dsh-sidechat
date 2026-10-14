@@ -41,14 +41,17 @@ export interface Composer {
  * 降级路径：草稿住本地 state，发送直连 session.prompt([...], 'queue')，
  * 失败时回填草稿并报错。
  *
- * firstSendPrefix：提交时获取主线进展快照；真实接受后才由 onAccepted 消费。
- * 失败时剥离临时前缀，保留正文与待发注释。
+ * firstBoundaryBlock（Codex 对齐）：首条消息的侧聊边界协议块（继承历史
+ * 只读参照 + 侧边助手策略）——一次性，接受后由 onAccepted 消费。
+ * firstSendPrefix：busy fork 的主线进展快照；同样一次性、真实接受后才
+ * 由 onAccepted 消费。失败时剥离临时前缀，保留正文与待发注释。
  *
  * onSubmitText（Delivery_05 内容身份）：每次 submit 拿到干净 body（不含
  * 快照前缀），供面板捕获首条消息主题为 topic；是否首条的判定归调用方。
  */
 export declare function useComposer(ctx: Context, session: SessionFace | undefined, childId: string | undefined, options?: {
     annotations?: AnnotationStore;
+    firstBoundaryBlock?: () => string | null;
     firstSendPrefix?: () => string | null;
     onSubmitText?: (body: string) => void;
     onAccepted?: () => void;

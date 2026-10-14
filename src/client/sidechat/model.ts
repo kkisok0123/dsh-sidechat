@@ -12,6 +12,7 @@
 import type { Context, SidebarTab } from '../host/contracts.ts'
 import type { ChatMessage } from '../chat/transcript.ts'
 import { splitProtocolPrefix } from '../annotations/format.ts'
+import { stripSideProtocolBlocks } from '../boundary.ts'
 import { t } from '../locales.ts'
 
 /** Tab 类型 id（better-sidebar 注册表键；带包前缀防冲突）。 */
@@ -66,6 +67,9 @@ export interface SideChatMeta {
    *  前缀（截 200 字符）——子会话首个 turn 的用户消息命中它才 cancel，
    *  防误伤用户自己的首个 turn。 */
   leakedPromptPrefix?: string
+  /** 侧聊边界块已随首条消息投递（Codex 对齐）；缺省 = 待投递。
+   *  一次性标记：接受后置 true，此后不再重复拼接。 */
+  boundaryDelivered?: boolean
   /** 遗传 turn 已中和（cancel + 折叠边界已覆盖）；缺省 = 未监护。 */
   inheritedPurged?: boolean
   /** 内容身份（Delivery_05）：首条用户消息摘要，sticky——只在首条
@@ -88,6 +92,7 @@ export function parseSideChatMeta(meta: unknown): SideChatMeta {
   if (raw.forkedMidTurn === true) out.forkedMidTurn = true
   if (raw.snapshotOnly === true) out.snapshotOnly = true
   if (typeof raw.leakedPromptPrefix === 'string' && raw.leakedPromptPrefix !== '') out.leakedPromptPrefix = raw.leakedPromptPrefix
+  if (raw.boundaryDelivered === true) out.boundaryDelivered = true
   if (raw.inheritedPurged === true) out.inheritedPurged = true
   if (typeof raw.topic === 'string' && raw.topic !== '') out.topic = raw.topic
   return out
@@ -205,8 +210,10 @@ export function pairQuestions(messages: readonly ChatMessage[]): ReadonlyMap<str
   let pending: string | undefined
   for (const message of messages) {
     if (message.role === 'user') {
-      const proto = splitProtocolPrefix(message.text)
-      const visible = (proto === null ? message.text : message.text.slice(proto.length)).trim()
+      // 边界/快照协议块先剥（首条侧边消息携带），注释/回流协议随后。
+      const stripped = stripSideProtocolBlocks(message.text)
+      const proto = splitProtocolPrefix(stripped)
+      const visible = (proto === null ? stripped : stripped.slice(proto.length)).trim()
       pending = visible === '' ? undefined : visible
     } else if (message.role === 'assistant' && message.streaming !== true && pending !== undefined) {
       pairs.set(message.key, pending)

@@ -23,6 +23,7 @@ Open a conversation with an existing reply. Click **Side** in its header, or ent
 ## Features
 
 - An independent side conversation forks the main conversation's complete history.
+- Side-conversation semantics match Codex `/side`: the first message carries a boundary protocol block (inherited history is reference-only; the side chat is a separate assistant that does not mutate by default, avoids sub-agents, and does not request escalated permissions), rendered as a "side conversation boundary" card.
 - On DSH 0.2.0-rc.2, the plugin uses the host's native Conversation Factory for messages, tools, models, permissions and composer. Older hosts use the plugin renderer.
 - The model menu refreshes provider labels and restores composer focus after a model change.
 - Select assistant text and add it to the main conversation or its original side conversation; references stay separate from drafts.

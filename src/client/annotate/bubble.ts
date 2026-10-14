@@ -13,6 +13,7 @@
  * 扫描重挂。观察者纪律与 overlay 同款（100ms 尾沿去抖）。
  */
 import { flattenReflowContent, splitProtocolPrefix } from '../annotations/format.ts'
+import { splitBoundaryPrefix } from '../boundary.ts'
 import { t } from '../locales.ts'
 import css from './annotate.module.css'
 
@@ -44,16 +45,53 @@ function hidePrefixChars(root: HTMLElement, length: number): HTMLSpanElement | n
 function applySurgery(flowItem: HTMLElement): void {
   if (flowItem.querySelector(':scope [data-dsh-sidechat-bubble]') !== null) return
   const text = flowItem.textContent ?? ''
-  const proto = splitProtocolPrefix(text)
-  if (proto === null) return
-  const hidden = hidePrefixChars(flowItem, proto.length)
+  // 侧聊协议区（Codex 对齐）：边界块 → 主线快照块 → 注释/回流协议块，
+  // 全部在消息连续前缀上（发送组装序保证），逐段剥出隐藏长度。
+  let hiddenLength = 0
+  let hasBoundary = false
+  let hasSnapshot = false
+  let rest = text
+  for (;;) {
+    const boundary = splitBoundaryPrefix(rest)
+    if (boundary !== null) {
+      hasBoundary = true
+      hiddenLength += rest.length - boundary.rest.length
+      rest = boundary.rest
+      continue
+    }
+    const snap = /^<mainline-progress-snapshot[\s\S]*?<\/mainline-progress-snapshot>/.exec(rest)
+    if (snap !== null) {
+      hasSnapshot = true
+      const after = rest.slice(snap[0]!.length)
+      hiddenLength += rest.length - after.trimStart().length
+      rest = after.trimStart()
+      continue
+    }
+    break
+  }
+  const proto = splitProtocolPrefix(rest)
+  if (proto !== null) hiddenLength += proto.length
+  if (hiddenLength === 0) return
+  const hidden = hidePrefixChars(flowItem, hiddenLength)
   if (hidden === null) return
 
   const labels = document.createElement('span')
   labels.dataset.dshSidechat = ''
   labels.dataset.dshSidechatBubble = ''
   labels.className = css.sentChipRow ?? ''
-  if (proto.annotations.length > 0) {
+  if (hasBoundary) {
+    const chip = document.createElement('span')
+    chip.className = css.sentChip ?? ''
+    chip.textContent = t('boundaryLabel')
+    labels.appendChild(chip)
+  }
+  if (hasSnapshot) {
+    const chip = document.createElement('span')
+    chip.className = css.sentChip ?? ''
+    chip.textContent = t('snapshotLabel')
+    labels.appendChild(chip)
+  }
+  if (proto !== null && proto.annotations.length > 0) {
     const chip = document.createElement('span')
     chip.className = css.sentChip ?? ''
     chip.textContent = t('sentChipLabel', { n: proto.annotations.length })
@@ -62,7 +100,7 @@ function applySurgery(flowItem: HTMLElement): void {
       .join('\n')
     labels.appendChild(chip)
   }
-  if (proto.reflows.length > 0) {
+  if (proto !== null && proto.reflows.length > 0) {
     const chip = document.createElement('span')
     chip.className = css.sentChip ?? ''
     chip.textContent = t('reflowBubbleLabel')

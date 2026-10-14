@@ -57,6 +57,13 @@ export function mainComposerOf(node: Element): HTMLElement | null {
   return node.closest<HTMLElement>('[data-composer-seat]')
 }
 
+/** 侧边原生会话面板内的 composer 手势命中（边界注入器的识别面）。 */
+export function sideNativeComposerGestureTarget(node: Element): HTMLElement | null {
+  const seat = node.closest<HTMLElement>('[data-composer-seat]')
+  if (seat === null) return null
+  return seat.closest<HTMLElement>('[data-sidechat-native-conversation]') !== null ? seat : null
+}
+
 export function composerSessionOf(node: Element, fallback: string): string {
   return node.closest<HTMLElement>('[data-sidechat-native-conversation]')?.dataset.sidechatChatSession ?? fallback
 }

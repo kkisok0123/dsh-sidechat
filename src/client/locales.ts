@@ -196,6 +196,7 @@ export const en = {
   inheritedLabel: 'Inherited from main session · up to the fork point · {n}',
   snapshotLabel: 'Mainline progress snapshot',
   snapshotLabelAt: 'Mainline progress snapshot · taken {at}',
+  boundaryLabel: 'Side conversation boundary · inherited history is reference-only',
 
   // P1-4 密度管理
   collapseAll: 'Collapse all',
@@ -222,6 +223,8 @@ export const en = {
   parentStripTitle: 'Main session status — click to jump back',
   parentRunning: 'Main: running',
   parentPending: 'Main: awaiting approval',
+  parentNeedsApproval: 'Main needs approval',
+  parentNeedsInput: 'Main needs input',
   parentIdle: 'Main: idle',
 }
 
@@ -403,6 +406,7 @@ export const zh: Record<CopyKey, string> = {
   inheritedLabel: '继承自主会话 · 截至 fork 点 · {n} 条',
   snapshotLabel: '主线进展快照',
   snapshotLabelAt: '主线进展快照 · 截于 {at}',
+  boundaryLabel: '侧边会话边界 · 继承历史仅作参照',
 
   collapseAll: '全部折叠',
   expandAll: '全部展开',
@@ -426,6 +430,8 @@ export const zh: Record<CopyKey, string> = {
   parentStripTitle: '主线会话状态——点击回到主对话',
   parentRunning: '主线：运行中',
   parentPending: '主线：待审批',
+  parentNeedsApproval: '主线需要审批',
+  parentNeedsInput: '主线需要输入',
   parentIdle: '主线：空闲',
 }
 

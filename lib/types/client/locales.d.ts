@@ -178,6 +178,7 @@ export declare const en: {
     inheritedLabel: string;
     snapshotLabel: string;
     snapshotLabelAt: string;
+    boundaryLabel: string;
     collapseAll: string;
     expandAll: string;
     jumpToLatest: string;
@@ -198,6 +199,8 @@ export declare const en: {
     parentStripTitle: string;
     parentRunning: string;
     parentPending: string;
+    parentNeedsApproval: string;
+    parentNeedsInput: string;
     parentIdle: string;
 };
 export type CopyKey = keyof typeof en;

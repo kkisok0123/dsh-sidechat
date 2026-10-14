@@ -22,6 +22,8 @@ export declare function quoteClipOf(body: HTMLElement, view: HTMLElement): {
 };
 export declare function nativeSideAssistantBodies(): HTMLElement[];
 export declare function mainComposerOf(node: Element): HTMLElement | null;
+/** 侧边原生会话面板内的 composer 手势命中（边界注入器的识别面）。 */
+export declare function sideNativeComposerGestureTarget(node: Element): HTMLElement | null;
 export declare function composerSessionOf(node: Element, fallback: string): string;
 export declare function composerSeatForSession(sessionId: string): HTMLElement | null;
 export declare function focusMainComposer(view: HTMLElement): void;
