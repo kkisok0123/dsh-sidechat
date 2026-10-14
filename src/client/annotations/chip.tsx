@@ -76,7 +76,9 @@ function AnnotationChipInner(props: { store: AnnotationStore; targetSessionId: s
         onClick={() => { setExpanded(open => !open) }}
       >
         <IconListPenOutline16 size={12} />
-        <span>{t(active.length === 1 ? 'chipOne' : 'chipMany', { n: active.length })}</span>
+        <span>{t(active.every(item => item.kind === 'selected-text')
+          ? active.length === 1 ? 'selectedTextOne' : 'selectedTextMany'
+          : active.length === 1 ? 'chipOne' : 'chipMany', { n: active.length })}</span>
       </button>}
       {expanded && active.length > 0 && (
         <ul className={css.chipPanel}>

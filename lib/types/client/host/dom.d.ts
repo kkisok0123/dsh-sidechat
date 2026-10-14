@@ -28,6 +28,8 @@ export declare function composerSessionOf(node: Element, fallback: string): stri
 export declare function composerSeatForSession(sessionId: string): HTMLElement | null;
 export declare function focusMainComposer(view: HTMLElement): void;
 /** Focus only the identified main view, never another pane's editor. */
+/** Focus a side composer by exact child identity; never fall back to the main input. */
+export declare function focusSideConversationComposer(sessionId: string): void;
 export declare function focusConversationComposer(sessionId: string): void;
 /** 主 composer 的宿主容器（侧边面板 textarea 不在其中，天然不串）。 */
 export declare function composerSeat(): HTMLElement | null;

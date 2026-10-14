@@ -31,6 +31,7 @@ export interface QuoteItem {
     readonly note: string;
     /** 展示编号（与角标一致），作为 <annotation id> 供模型引用。 */
     readonly number?: number;
+    readonly kind?: 'selected-text';
 }
 /** 协议头（双语）：zh「我批注了以下 2 处内容：」/ en 见 locales。 */
 export declare function protocolHeader(n: number): string;

@@ -34,6 +34,7 @@ export interface QuoteItem {
   readonly note: string
   /** 展示编号（与角标一致），作为 <annotation id> 供模型引用。 */
   readonly number?: number
+  readonly kind?: 'selected-text'
 }
 
 /** 协议头（双语）：zh「我批注了以下 2 处内容：」/ en 见 locales。 */
@@ -53,7 +54,9 @@ export function formatAnnotationXml(index: number, item: QuoteItem): string {
 /** 注释协议块 = 头部句 + 每个注释一个 XML 块（行间无空行，与正文空一行）。 */
 export function buildProtocolBlock(items: readonly QuoteItem[]): string {
   return [
-    protocolHeader(items.length),
+    items.every(item => item.kind === 'selected-text')
+      ? 'Selected text from the conversation (reference context):'
+      : protocolHeader(items.length),
     ...items.map((item, i) => formatAnnotationXml(i + 1, item)),
   ].join('\n')
 }
@@ -61,7 +64,7 @@ export function buildProtocolBlock(items: readonly QuoteItem[]): string {
 // ── 反解析（气泡手术用；纯函数可测） ─────────────────────────────────────────
 
 /** 协议头识别（zh/en 都认）：整行匹配。 */
-export const PROTOCOL_HEADER_RE = /^(?:我批注了以下 (\d+) 处内容：|I annotated (\d+) passage\(s\) of the conversation above:)$/
+export const PROTOCOL_HEADER_RE = /^(?:我批注了以下 (\d+) 处内容：|I annotated (\d+) passage\(s\) of the conversation above:|Selected text from the conversation \(reference context\):)$/
 
 export interface ParsedAnnotation {
   readonly id: number

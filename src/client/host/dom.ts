@@ -79,6 +79,14 @@ export function focusMainComposer(view: HTMLElement): void {
 }
 
 /** Focus only the identified main view, never another pane's editor. */
+/** Focus a side composer by exact child identity; never fall back to the main input. */
+export function focusSideConversationComposer(sessionId: string): void {
+  const view = [...document.querySelectorAll<HTMLElement>('[data-sidechat-chat-session]')]
+    .find(view => view.dataset.sidechatChatSession === sessionId)
+  if (view === undefined) return
+  view.querySelector<HTMLElement>('[data-composer-seat] [data-composer-input], [data-composer-seat] textarea, [data-sidechat-composer] textarea')?.focus()
+}
+
 export function focusConversationComposer(sessionId: string): void {
   const view = [...document.querySelectorAll<HTMLElement>('[data-conversation-session]')]
     .find(view => view.dataset.conversationSession === sessionId)

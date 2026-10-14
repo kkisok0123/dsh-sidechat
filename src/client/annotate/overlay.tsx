@@ -19,7 +19,7 @@ import type { Context } from '../host/contracts.ts'
 import { currentSessionIdOf } from '../host/currentSession.ts'
 import { hostDiagnostics } from '../host/probes.ts'
 import { probeInput } from '../host/input.ts'
-import { focusConversationComposer } from '../host/dom.ts'
+import { focusConversationComposer, focusSideConversationComposer } from '../host/dom.ts'
 import { sideChatBridge, type SideChatBridge } from '../bridge.ts'
 import { t } from '../locales.ts'
 import { useLocaleTick } from '../locale-tick.ts'
@@ -43,14 +43,9 @@ interface EditorState {
 
 interface Bounds { left: number; top: number; right: number; bottom: number }
 
-/** 「Ask in side chat」的注解收集态：先弹编辑器（与「Add to conversation」一致，
- *  允许空注解），保存后经 bridge 等待真实子会话，创建共享注释对象；正文保持干净。 */
+/** Open/focus the side chat immediately; retain the selection until its quote is attached. */
 interface SideDraftState {
   readonly snapshot: SelectionSnapshot
-  readonly x: number
-  readonly y: number
-  /** 目标侧边聊天 Tab 标题（编辑器上标明「发送至：侧边 N」）。 */
-  readonly targetTitle?: string
   readonly abort: AbortController
   readonly target: ReturnType<SideChatBridge['captureTarget']> | undefined
 }
@@ -102,6 +97,9 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
   const currentSessionId = currentSessionIdOf(ctx)
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [sideDraft, setSideDraft] = useState<SideDraftState | null>(null)
+  const [sideFailed, setSideFailed] = useState(false)
+  const sideRequest = useRef<SideDraftState | null>(null)
+  useEffect(() => () => { sideRequest.current?.abort.abort() }, [])
   // Bumped by scroll/resize/DOM mutation so badge/highlight geometry follows.
   const [, setGeometryTick] = useState(0)
   const rangeCache = useRef(new Map<number, CachedRange>())
@@ -173,33 +171,66 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
     window.getSelection()?.removeAllRanges()
   }
 
-  const askInSideChat = (snapshot: SelectionSnapshot): void => {
-    // 收集注解（可空），等选定的实际目标就绪后递交共享对象。
-    const anchor = selectionBadgePoint(snapshot)
-    const target = sideChatBridge.current?.captureTarget(snapshot.sessionId)
-    const targetTitle = target?.title
-    setSideDraft({ snapshot, x: anchor.x, y: anchor.y, abort: new AbortController(), target, ...(targetTitle !== undefined ? { targetTitle } : {}) })
-    controller.clear()
-    window.getSelection()?.removeAllRanges()
+  const attachSelectedText = (snapshot: SelectionSnapshot, sessionId: string): void => {
+    store.add({
+      kind: 'selected-text', sessionId, sourceSessionId: snapshot.sessionId,
+      sourceSurface: snapshot.source.surface, anchorKey: snapshot.anchorKey,
+      text: snapshot.text, anchorText: snapshot.anchorText, occurrence: snapshot.occurrence, note: '',
+    })
+    // Only add a reference: preserve the question draft and never submit it here.
+    requestAnimationFrame(() => { focusSideConversationComposer(sessionId) })
   }
 
-  const commitSideDraft = async (note: string): Promise<boolean> => {
-    if (sideDraft === null) return false
-    if (sideDraft.target === undefined) return false
+  const openSideSelection = async (request: SideDraftState): Promise<void> => {
     try {
-      const target = await sideDraft.target.resolve(sideDraft.abort.signal)
-      if (sideDraft.abort.signal.aborted || currentSessionIdOf(ctx) !== sideDraft.snapshot.sessionId || !target.isOpen()) return false
-      const snapshot = sideDraft.snapshot
-      const annotation = store.add({
-        sessionId: target.childId, sourceSessionId: snapshot.sessionId, sourceSurface: 'main',
-        anchorKey: snapshot.anchorKey, text: snapshot.text, anchorText: snapshot.anchorText,
-        occurrence: snapshot.occurrence, note,
-      })
-      rangeCache.current.set(annotation.id, { range: snapshot.range.cloneRange(), view: snapshot.source.view })
-      setSideDraft(current => current === sideDraft ? null : current)
-      return true
-    } catch { return false }
+      if (request.target === undefined) throw new Error('Side chat bridge unavailable')
+      // resolve opens/focuses the frozen target synchronously before waiting for its fork.
+      const target = await request.target.resolve(request.abort.signal)
+      if (request.abort.signal.aborted || sideRequest.current !== request) return
+      if (currentSessionIdOf(ctx) !== request.snapshot.sessionId || !target.isOpen()) throw new Error('Side chat target changed')
+      attachSelectedText(request.snapshot, target.childId)
+      sideRequest.current = null
+      setSideDraft(null)
+    } catch {
+      if (!request.abort.signal.aborted && sideRequest.current === request) setSideFailed(true)
+    }
   }
+
+  const askInSideChat = (snapshot: SelectionSnapshot): void => {
+    if (sideRequest.current !== null) return
+    controller.clear()
+    window.getSelection()?.removeAllRanges()
+    if (snapshot.source.surface === 'side') {
+      attachSelectedText(snapshot, snapshot.sessionId)
+      return
+    }
+    const request: SideDraftState = {
+      snapshot, abort: new AbortController(), target: sideChatBridge.current?.captureTarget(snapshot.sessionId),
+    }
+    sideRequest.current = request
+    setSideFailed(false)
+    setSideDraft(request)
+    void openSideSelection(request)
+  }
+
+  const cancelSideSelection = (): void => {
+    sideRequest.current?.abort.abort()
+    sideRequest.current = null
+    setSideDraft(null)
+    setSideFailed(false)
+  }
+
+  useEffect(() => {
+    if (sideDraft === null) return
+    if (currentSessionId !== sideDraft.snapshot.sessionId) { cancelSideSelection(); return }
+    const cancelOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      cancelSideSelection()
+    }
+    document.addEventListener('keydown', cancelOnEscape, true)
+    return () => { document.removeEventListener('keydown', cancelOnEscape, true) }
+  }, [sideDraft, currentSessionId])
 
   // sent 态注释的只读回看卡片（角标灰态点开的落点）。
   const [viewer, setViewer] = useState<{ annotationId: number; x: number; y: number; bounds?: Bounds } | null>(null)
@@ -229,7 +260,7 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
             && hostDiagnostics(ctx).getSnapshot().capabilities.some(capability => capability.id === 'dock' && capability.state === 'available')}
           sideChatAvailable={selection.source.surface === 'side' || sideChatBridge.current !== null}
           onAdd={() => { addToConversation(selection, selection.source.surface === 'side' ? selection.source.parentSessionId ?? '' : selection.sessionId) }}
-          onAsk={() => { selection.source.surface === 'side' ? addToConversation(selection) : askInSideChat(selection) }}
+          onAsk={() => { askInSideChat(selection) }}
         />
       )}
       <BadgeLayer
@@ -277,14 +308,15 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
         />
       )}
       {sideDraft !== null && (
-        <SideChatNoteEditor
-          x={sideDraft.x}
-          y={sideDraft.y}
-          targetTitle={sideDraft.targetTitle}
-          bounds={sourceClip(sideDraft.snapshot.source)}
-          onSave={commitSideDraft}
-          onCancel={() => { sideDraft.abort.abort(); setSideDraft(null) }}
-        />
+        <div className={css.toolbar} style={{ left: selectionBadgePoint(sideDraft.snapshot).x, top: selectionBadgePoint(sideDraft.snapshot).y }} role={sideFailed ? 'alert' : 'status'}>
+          <span className={css.toolbarButton}>{t(sideFailed ? 'openSideFailed' : 'sideTargetWaiting')}</span>
+          {sideFailed && <button type="button" className={css.toolbarButton} onClick={() => {
+            const snapshot = sideDraft.snapshot
+            cancelSideSelection()
+            askInSideChat(snapshot)
+          }}>{t('sideQuoteRetry')}</button>}
+          <button type="button" className={css.toolbarButton} onClick={cancelSideSelection}>{t('cancel')}</button>
+        </div>
       )}
       {viewingAnnotation !== undefined && viewer !== null && (
         <SentViewer
@@ -549,7 +581,7 @@ function BadgeLayer(props: {
   editingId: number | null
   onOpen: (annotation: Annotation, point: { x: number; y: number; bounds?: Bounds; targetTitle?: string }) => void
 }): ReactNode {
-  const annotations = props.store.sessions().flatMap(id => props.store.list(id))
+  const annotations = props.store.sessions().flatMap(id => props.store.list(id)).filter(annotation => annotation.kind !== 'selected-text')
   const badges: ReactNode[] = []
   const placed: { x: number; y: number }[] = []
   let highlight: ReactNode = null

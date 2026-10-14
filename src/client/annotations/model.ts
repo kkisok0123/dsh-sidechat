@@ -24,6 +24,8 @@ export interface Annotation {
   /** Source is independent of the send target. Missing fields revive legacy main quotes. */
   readonly sourceSessionId?: string
   readonly sourceSurface?: 'main' | 'side'
+  /** Selected text is a composer reference, not an editable response annotation. */
+  readonly kind?: 'selected-text'
   /** `data-chat-anchor-key` of the owning message (re-anchor key). */
   readonly anchorKey: string | undefined
   /** Full human-selected quote; chip truncation is visual only. */
@@ -42,6 +44,8 @@ export interface AnnotationDraft {
   readonly sessionId: string
   readonly sourceSessionId?: string
   readonly sourceSurface?: 'main' | 'side'
+  /** Selected text is a composer reference, not an editable response annotation. */
+  readonly kind?: 'selected-text'
   readonly anchorKey: string | undefined
   readonly text: string
   readonly anchorText: string
@@ -91,6 +95,7 @@ function reviveStored(value: unknown): Annotation | null {
     sessionId: a.sessionId,
     sourceSessionId: typeof a.sourceSessionId === 'string' && a.sourceSessionId !== '' ? a.sourceSessionId : undefined,
     sourceSurface: a.sourceSurface === 'main' || a.sourceSurface === 'side' ? a.sourceSurface : undefined,
+    ...(a.kind === 'selected-text' ? { kind: 'selected-text' as const } : {}),
     anchorKey: typeof a.anchorKey === 'string' && a.anchorKey !== '' ? a.anchorKey : undefined,
     text: a.text,
     anchorText: a.anchorText,
@@ -208,6 +213,7 @@ export function createAnnotationStore(
         sessionId: draft.sessionId,
         sourceSessionId: draft.sourceSessionId,
         sourceSurface: draft.sourceSurface,
+        ...(draft.kind === 'selected-text' ? { kind: 'selected-text' as const } : {}),
         anchorKey: draft.anchorKey,
         text: draft.text,
         anchorText: draft.anchorText,

@@ -56,17 +56,14 @@ async function addQuote(page: Page): Promise<void> {
 test.describe('annotation editor lifecycle', () => {
   test.beforeEach(async ({ page }) => { await prepareSeedPage(page) })
 
-  test('side-chat note survives outside click; empty note saves and Escape discards', async ({ page }) => {
+  test('Ask in side chat opens directly, attaches selected text and preserves the question draft', async ({ page }) => {
     const overlay = page.locator(OVERLAY)
     const ask = async () => {
       await selectQuote(page)
       await overlay.getByText(/^(Ask in side chat|在侧边聊天中提问)$/).click()
-      await expect(overlay.locator('input')).toBeVisible()
+      await expect(overlay.locator('input')).toHaveCount(0)
     }
     await ask()
-    await overlay.locator('input').fill('侧边外点保存的完整注解')
-    await composerOf(page).click()
-    await expect(overlay.locator('input')).toHaveCount(0)
     const side = sideChatOf(page)
     await expect(side).toHaveCount(1, { timeout: 30_000 })
     const childId = await side.getAttribute('data-sidechat-chat-session')
@@ -74,27 +71,23 @@ test.describe('annotation editor lifecycle', () => {
     const sideInput = side.getByPlaceholder(/^(Message…|输入消息)/)
     const childItems = async () => page.evaluate(id => JSON.parse(localStorage.getItem('dsh-sidechat:annotations:v1:' + id) ?? '[]'), childId!)
     await expect(sideInput).toHaveValue('')
-    await expect.poll(childItems).toMatchObject([{ text: 'full history snapshot', note: '侧边外点保存的完整注解', state: 'active', sessionId: childId, sourceSessionId: process.env.DSH_E2E_SEED_SESSION, sourceSurface: 'main' }])
+    await expect.poll(childItems).toMatchObject([{ kind: 'selected-text', text: 'full history snapshot', note: '', state: 'active', sessionId: childId, sourceSessionId: process.env.DSH_E2E_SEED_SESSION, sourceSurface: 'main' }])
+    await expect(sideInput).toBeFocused()
     expect(await items(page)).toEqual([])
 
+    await sideInput.fill('Explain these selected passages')
     await ask()
-    await composerOf(page).click()
-    await expect(overlay.locator('input')).toHaveCount(0)
     await expect.poll(childItems).toHaveLength(2)
-    expect((await childItems())[1]).toMatchObject({ text: 'full history snapshot', note: '', state: 'active' })
-    await expect(sideInput).toHaveValue('')
-    const beforeCancel = await childItems()
-    await ask()
-    await overlay.locator('input').fill('Escape 要放弃的注解')
-    await page.keyboard.press('Escape')
-    await expect(overlay.locator('input')).toHaveCount(0)
-    expect(await childItems()).toEqual(beforeCancel)
-    await expect(sideInput).toHaveValue('')
+    expect((await childItems())[1]).toMatchObject({ kind: 'selected-text', text: 'full history snapshot', note: '', state: 'active' })
+    await expect(sideInput).toHaveValue('Explain these selected passages')
+    await expect(sideInput).toBeFocused()
 
     const parentBefore = userMessagesOf(process.env.DSH_E2E_SEED_SESSION!)
+    expect(userMessagesOf(childId!).some(text => text.includes('Explain these selected passages'))).toBe(false)
     await side.getByRole('button', { name: /^(Send|发送)$/ }).click()
-    await expect.poll(() => userMessagesOf(childId!).filter(text => text.includes('<note>侧边外点保存的完整注解</note>'))).toHaveLength(1)
-    const sent = userMessagesOf(childId!).find(text => text.includes('<note>侧边外点保存的完整注解</note>'))!
+    await expect.poll(() => userMessagesOf(childId!).filter(text => text.includes('Explain these selected passages'))).toHaveLength(1)
+    const sent = userMessagesOf(childId!).find(text => text.includes('Explain these selected passages'))!
+    expect(sent).toContain('Selected text from the conversation (reference context):')
     expect(sent.match(/<quote>full history snapshot<\/quote>/g)).toHaveLength(2)
     await expect.poll(childItems).toMatchObject([{ state: 'sent' }, { state: 'sent' }])
     expect(userMessagesOf(process.env.DSH_E2E_SEED_SESSION!)).toEqual(parentBefore)

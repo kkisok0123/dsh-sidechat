@@ -137,6 +137,9 @@ export declare const en: {
     sideNoteAria: string;
     confirmAskAria: string;
     openSideFailed: string;
+    sideQuoteRetry: string;
+    selectedTextOne: string;
+    selectedTextMany: string;
     sideTargetWaiting: string;
     sendToTarget: string;
     deleteNote: string;

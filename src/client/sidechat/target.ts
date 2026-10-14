@@ -41,7 +41,7 @@ export function ensureSideChatTarget(ctx: Context, parentId: string, signal: Abo
     }
     const cancel = (): void => { fail('已取消保存引用') }
     if (choice?.tabId !== undefined && seen === undefined && (native || !collectSideTabs(bs?.getSnapshot().state).some(tab => tab.id === choice.tabId))) {
-      fail('目标侧边聊天已关闭；注解仍在编辑器中'); return
+      fail('目标侧边聊天已关闭；选中文字已保留'); return
     }
     const check = (): void => {
       if (settled) return
@@ -50,10 +50,10 @@ export function ensureSideChatTarget(ctx: Context, parentId: string, signal: Abo
         tabId = opening?.target?.tabId ?? liveSideChatsOf(parentId).find(panel => panel.readStatus().requestId === requestId)?.tabId
       }
       const panel = tabId === undefined ? undefined : liveSideChat(tabId, parentId)
-      if (panel === undefined) { if (seen !== undefined) fail('目标侧边聊天已关闭；注解仍在编辑器中'); return }
+      if (panel === undefined) { if (seen !== undefined) fail('目标侧边聊天已关闭；选中文字已保留'); return }
       seen = panel
       const status = panel.readStatus()
-      if (choice?.childId !== undefined && status.childId !== undefined && status.childId !== choice.childId) { fail('目标侧边会话已改变；请保留注解并重新选择'); return }
+      if (choice?.childId !== undefined && status.childId !== undefined && status.childId !== choice.childId) { fail('目标侧边会话已改变；选中文字已保留，请重新选择'); return }
       if (status.phase === 'fork-error' || status.phase === 'missing') { fail(status.error ?? '目标侧边聊天未能就绪'); return }
       if (status.phase !== 'chat' || status.childId === undefined) return
       const childId = status.childId
@@ -62,7 +62,7 @@ export function ensureSideChatTarget(ctx: Context, parentId: string, signal: Abo
     }
     unsubscribe = subscribeLiveSideChats(check)
     signal.addEventListener('abort', cancel, { once: true })
-    timer = setTimeout(() => fail('目标侧边聊天尚未就绪；请保留注解并重试'), 15_000)
+    timer = setTimeout(() => fail('目标侧边聊天尚未就绪；选中文字已保留，请重试'), 15_000)
     try {
       if (native && tabId === undefined && opening === undefined) {
         const sidebar = sidebarRightOf(ctx)
