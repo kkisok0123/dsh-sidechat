@@ -42,6 +42,7 @@ export interface SideChatMetaRecord {
   readonly leakedPromptPrefix?: string
   /** 侧聊边界块已随首条消息投递（Codex 对齐）；一次性标记。 */
   readonly boundaryDelivered?: boolean
+  readonly contextThroughSeq?: number
   /** 遗传 turn 已中和（cancel + 边界覆盖完成）。 */
   readonly inheritedPurged?: boolean
   /** 内容身份（Delivery_05）：首条用户消息摘要，sticky。 */
@@ -104,6 +105,7 @@ function revive(value: unknown): SideChatMetaRecord | null {
     ...(r.snapshotOnly === true ? { snapshotOnly: true } : {}),
     ...(typeof r.leakedPromptPrefix === 'string' ? { leakedPromptPrefix: r.leakedPromptPrefix } : {}),
     ...(r.boundaryDelivered === true ? { boundaryDelivered: true } : {}),
+    ...(typeof r.contextThroughSeq === 'number' && Number.isFinite(r.contextThroughSeq) ? { contextThroughSeq: r.contextThroughSeq } : {}),
     ...(r.inheritedPurged === true ? { inheritedPurged: true } : {}),
     ...(typeof r.topic === 'string' && r.topic !== '' ? { topic: r.topic } : {}),
     number: r.number,

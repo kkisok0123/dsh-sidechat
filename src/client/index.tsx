@@ -9,6 +9,7 @@
  * 运行时经 directNativeLeg(ctx) 分腿，消费点全部判空。
  */
 import type { Context } from './host/contracts.ts'
+import './image-resize.module.css'
 import { registerCompatibilityStatus } from './diagnostics/index.tsx'
 import { attachLocale, type LocaleServiceLike } from './locales.ts'
 import { createReflowStore } from './reflow.ts'

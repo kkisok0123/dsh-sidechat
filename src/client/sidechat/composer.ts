@@ -174,7 +174,9 @@ export function useComposer(ctx: Context, session: SessionFace | undefined, chil
     // 参照 + 侧边助手策略），之后再拼主线进展快照（busy fork 时）。两者
     // 都是一次性——真实接受后由 onAccepted 消费，失败剥离保留正文。
     const boundary = childId !== undefined && options?.firstBoundaryBlock !== undefined ? options.firstBoundaryBlock() : null
-    const snapshot = options?.firstSendPrefix?.() ?? null
+    let snapshot: string | null
+    try { snapshot = options?.firstSendPrefix?.() ?? null }
+    catch (error) { setSendError(error instanceof Error ? error.message : String(error)); return }
     const prefix = [boundary, snapshot].filter(part => part !== null).join('\n\n')
     const text = prefix === '' ? body : `${prefix}\n\n${body}`
     if (input !== null && localDraft !== '') { setSendError(t('draftRecoveryConflict')); return }

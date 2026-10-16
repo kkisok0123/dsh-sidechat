@@ -31,7 +31,7 @@ export interface SnapshotEntry {
  * 头部）。起点之后：assistant 拆思考/正文两拍，tool-result 成拍，其余节点
  * （context 注入、系统面）不入快照。
  */
-export declare function snapshotEntriesOf(nodes: readonly unknown[], partial?: unknown): SnapshotEntry[];
+export declare function snapshotEntriesOf(nodes: readonly unknown[], partial?: unknown, allNodes?: boolean): SnapshotEntry[];
 /** 拍序列 → 协议块文本（拼进首条侧边消息前缀的形态）。 */
 export declare function serializeSnapshot(entries: readonly SnapshotEntry[], takenAt: Date): string;
 /** 协议块标记（WI-03 呈现层据此把快照从气泡提升到继承卡）。 */

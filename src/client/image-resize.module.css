@@ -1,0 +1,17 @@
+/* Both conversation factories use this public image slot. Keep thumbnail
+ * layout/painting local while their containing columns change width. The
+ * original-image dialog is portaled outside the slot and remains unaffected. */
+:global([data-slot="conversation.message.images"]) img {
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Markdown images resize with the column; a separate paint layer lets the
+ * compositor scale the decoded bitmap without repainting surrounding text. */
+:global([data-conversation-session]) :global([data-chat-flow-kind]) img,
+:global([data-sidechat-chat-session]) :global([data-sidechat-transcript]) img {
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}

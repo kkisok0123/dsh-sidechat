@@ -52,9 +52,9 @@ function contentText(content: unknown): string {
  * 头部）。起点之后：assistant 拆思考/正文两拍，tool-result 成拍，其余节点
  * （context 注入、系统面）不入快照。
  */
-export function snapshotEntriesOf(nodes: readonly unknown[], partial?: unknown): SnapshotEntry[] {
-  let start = -1
-  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+export function snapshotEntriesOf(nodes: readonly unknown[], partial?: unknown, allNodes = false): SnapshotEntry[] {
+  let start = allNodes ? 0 : -1
+  for (let i = allNodes ? -1 : nodes.length - 1; i >= 0; i -= 1) {
     const n = nodes[i] as Record<string, unknown>
     if (n?.kind === 'user' || n?.kind === 'steering') { start = i; break }
   }

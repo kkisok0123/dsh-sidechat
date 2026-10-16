@@ -5,6 +5,7 @@ import type { Context, SessionId, SessionInput } from '../host/contracts.ts'
 import { resolveInput, inputAttachmentIds } from '../host/input.ts'
 export { resolveInput } from '../host/input.ts'
 import { currentSessionIdOf } from '../host/currentSession.ts'
+import { prepareSideContext } from '../sendContext.ts'
 import { t } from '../locales.ts'
 import { submitAnnotations } from '../annotations/send.ts'
 import type { AnnotationStore } from '../annotations/model.ts'
@@ -39,18 +40,22 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
 
   const commitAsync = async (sessionId: SessionId, input: SessionInput, reflows: ReturnType<typeof reflow.list>, active: ReturnType<typeof store.listActive>, mode?: 'queue' | 'steer'): Promise<void> => {
     try {
+      const sideContext = prepareSideContext(sessionId)
       const { injectedIds } = await tryInjectReflows(sessionId, reflows)
       for (const id of injectedIds) reflow.remove(id)
       const hitchhikers = reflows.filter(item => !injectedIds.has(item.id))
-      if (hitchhikers.length === 0 && active.length === 0) {
+      if (hitchhikers.length === 0 && active.length === 0 && !sideContext?.block) {
         if (input.state.getSnapshot().draft.trim() !== '' || inputAttachmentIds(input).length > 0) input.submit(mode)
         return
       }
       const accepted = await submitAnnotations({
         ctx, store, sessionId, input, annotations: active,
-        leadingBlocks: hitchhikers.map(item => buildReflowBlock(item)), mode,
+        leadingBlocks: [sideContext?.block ?? '', ...hitchhikers.map(item => buildReflowBlock(item))].filter(Boolean), mode,
       })
-      if (accepted) for (const item of hitchhikers) reflow.remove(item.id)
+      if (accepted) {
+        sideContext?.accepted()
+        for (const item of hitchhikers) reflow.remove(item.id)
+      }
     } catch (error) {
       store.setSubmission(sessionId, { pending: false, error: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -64,7 +69,8 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
     if (sessionId === '') return false
     const active = store.listActive(sessionId)
     const reflows = reflow.list(sessionId)
-    if (active.length === 0 && reflows.length === 0) return false
+    const sideSeat = composerSeatForSession(sessionId)?.closest('[data-sidechat-native-conversation]')
+    if (active.length === 0 && reflows.length === 0 && sideSeat == null) return false
     const input = resolveInput(ctx, sessionId)
     if (input === undefined) {
       store.setSubmission(sessionId, { pending: false, error: t('inputUnavailable') })
@@ -73,6 +79,7 @@ export function installSendInterceptor(ctx: Context, store: AnnotationStore, ref
     const snap = input.state.getSnapshot()
     const draft = snap.draft
     if (draft.trimStart().startsWith('/')) return false
+    if (draft.trim() === '' && active.length === 0 && reflows.length === 0 && inputAttachmentIds(input).length === 0) return false
     // 机器相位守卫：claimed/adjudicating/submitting = 弹窗/命令/事务在走。
     if (snap.phase !== 'plain') return false
     // 弹窗 DOM 守卫：@引用 listbox、「+」菜单展开等。

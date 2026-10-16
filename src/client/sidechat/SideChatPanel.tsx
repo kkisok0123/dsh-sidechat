@@ -12,8 +12,7 @@
  * 暂停订阅。非 staged 会话需 off-face open() 开窗（lifecycle.openSessionWindow），
  * 否则消息流永远为空（client-runtime 只为 staged 会话开窗的已知偏差）。
  */
-import { focusMainComposer, sideNativeComposerGestureTarget } from '../host/dom.ts'
-import { inputAttachmentIds, prependInputText } from '../host/input.ts'
+import { focusMainComposer } from '../host/dom.ts'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Context, SessionFace, TabComponentProps, NativeTabFrameworkProps, SessionReference } from '../host/contracts.ts'
 import { useComposer, resolveSessionInput, type Composer } from './composer.ts'
@@ -22,8 +21,9 @@ import { transcriptOf } from '../chat/transcript.ts'
 import { EmptyState, MessageList, StateScreen } from './rows.tsx'
 import { armInheritedTurnPurge, chatSourceOf, closeSideTab, ensurePanelOpen, forkAndRegister, openSessionWindow, readModelName, retainSession, setSideChatTopic, unarchiveSideSession, updateTabMeta } from './lifecycle.ts'
 import { topicOf } from './identity.ts'
-import { buildMainlineSnapshot } from './snapshot.ts'
-import { boundaryPromptBlock } from '../boundary.ts'
+import { mainlineUpdate } from './contextSync.ts'
+import { registerSideContext } from '../sendContext.ts'
+import { boundaryPromptBlock, stripSideProtocolBlocks } from '../boundary.ts'
 import { directNativeLeg, registerLiveSideChat, notifyLiveSideChats, rootContext } from './native.ts'
 import { resolveMainSessionOpener } from '../host/navigation.ts'
 import { dropClosedSideChat, recordClosedSideChat } from './recentClosed.ts'
@@ -46,70 +46,6 @@ const NOOP_UNSUBSCRIBE = (): void => {}
 /** uSES 空快照常量（禁产新引用——`?? []` 字面量每次新数组会无限重渲）。 */
 const NO_PENDING: readonly import('./pending.ts').PendingItem[] = []
 
-/**
- * 原生会话模式的边界注入器（Codex 对齐）：该模式下宿主 composer 直接
- * 提交，useComposer 不在链路上——首条发送手势时把边界协议块前插进宿主
- * 草稿并标记 boundaryDelivered（一次性；宿主拒绝发送时边界留在草稿里，
- * 重试自然携带，清除草稿后不再重投——双块比缺块糟，宁可少勿重复）。
- * 识别面 = 本面板 root 内的 composer seat（host/dom 专用选择器）；
- * 面板不可见/输入机缺席/相位非 plain 时放行，绝不阻断宿主原生发送。
- */
-function NativeBoundaryInterceptor(props: {
-  ctx: Context
-  childId: string
-  scopeSessionId: string
-  tabId: string
-  metaRef: { current: import('./model.ts').SideChatMeta }
-  visible: boolean
-}): ReactNode {
-  useEffect(() => {
-    if (!props.visible) return
-    const { ctx, childId } = props
-    // 同步已投递守卫：metaRef 随重渲刷新（异步），同一手势的 keydown +
-    // pointerdown 双触发在重渲前到达——没有本地旗会双重前插边界块。
-    let delivered = props.metaRef.current.boundaryDelivered === true
-    const deliver = (): void => {
-      if (delivered) return
-      if (props.metaRef.current.boundaryDelivered === true) { delivered = true; return }
-      const input = resolveSessionInput(ctx, childId)
-      if (input === null || input === undefined) return
-      const state = input.state.getSnapshot()
-      if (state.phase !== 'plain') return
-      // 空草稿手势不投递（useComposer.submit 同款早退）：空 Enter 若前插
-      // 边界块，宿主会提交「只有边界块」的消息并烧掉一次性投递资格。
-      if (state.draft.trim() === '' && inputAttachmentIds(input).length === 0) return
-      const block = boundaryPromptBlock()
-      const snapshotBlock = props.metaRef.current.forkedMidTurn === true
-        ? buildMainlineSnapshot(ctx, props.metaRef.current.parentSessionId ?? props.scopeSessionId)
-        : null
-      const prefix = [block, snapshotBlock].filter(part => part !== null).join('\n\n')
-      if (!prependInputText(input, `${prefix}\n\n`)) return
-      delivered = true
-      updateTabMeta(ctx, props.scopeSessionId, props.tabId, cur => ({ ...cur, boundaryDelivered: true, ...(props.metaRef.current.forkedMidTurn === true ? { forkedMidTurn: undefined } : {}) }))
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return
-      const target = event.target
-      if (!(target instanceof Element)) return
-      if (sideNativeComposerGestureTarget(target) === null) return
-      deliver()
-    }
-    const onPointerDown = (event: PointerEvent): void => {
-      if (event.button !== 0) return
-      const target = event.target
-      if (!(target instanceof Element)) return
-      if (sideNativeComposerGestureTarget(target) === null) return
-      deliver()
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    document.addEventListener('pointerdown', onPointerDown, true)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true)
-      document.removeEventListener('pointerdown', onPointerDown, true)
-    }
-  }, [props.ctx, props.childId, props.scopeSessionId, props.tabId, props.visible])
-  return null
-}
 
 /** D2 写型工具名（无 diff 卡时的名字兜底）。 */
 const WRITE_TOOLS = new Set(['edit', 'write', 'str-replace-editor', 'str_replace_editor'])
@@ -294,24 +230,29 @@ export function SideChatPanel(props: TabComponentProps & { reflow: ReflowStore; 
   // 清标记，失败剥离临时前缀、保留正文，重试时重新读取最新进展。
   const tabMetaRef = useRef(meta)
   tabMetaRef.current = meta
+  const contextPending = useRef<{ block: string; accepted(): void }>()
+  const prepareContext = useCallback(() => {
+    const m = tabMetaRef.current
+    const after = m.contextThroughSeq ?? (m.forkedMidTurn === true ? 0 : m.boundarySeq ?? 0)
+    const update = mainlineUpdate(ctx, m.parentSessionId ?? scope.sessionId, after)
+    return {
+      block: [m.boundaryDelivered === true ? '' : boundaryPromptBlock(), update.block].filter(Boolean).join('\n\n'),
+      accepted: () => {
+        tabMetaRef.current = { ...tabMetaRef.current, contextThroughSeq: update.through, boundaryDelivered: true, forkedMidTurn: undefined }
+        updateTabMeta(ctx, scope.sessionId, tab.id, cur => ({ ...cur, contextThroughSeq: update.through, boundaryDelivered: true, forkedMidTurn: undefined }))
+      },
+    }
+  }, [ctx, scope.sessionId, tab.id])
+  useEffect(() => childId === undefined ? undefined : registerSideContext(childId, prepareContext), [childId, prepareContext])
   const composerOptions = useMemo(() => ({
     annotations: props.annotations,
     // 侧聊边界（Codex 对齐）：首条消息拼边界协议块——继承历史只读参照 +
     // 侧边助手策略。一次性：未投递（boundaryDelivered 缺省）才拼。
-    firstBoundaryBlock: (): string | null => {
-      if (tabMetaRef.current.boundaryDelivered === true) return null
-      return boundaryPromptBlock()
+    firstSendPrefix: (): string => {
+      contextPending.current = prepareContext()
+      return contextPending.current.block
     },
-    firstSendPrefix: (): string | null => {
-      const m = tabMetaRef.current
-      if (m.forkedMidTurn !== true || m.parentSessionId === undefined) return null
-      const block = buildMainlineSnapshot(ctx, m.parentSessionId)
-      if (block === null) return null
-      return block
-    },
-    onAccepted: (): void => {
-      updateTabMeta(ctx, scope.sessionId, tab.id, (cur) => ({ ...cur, forkedMidTurn: undefined, boundaryDelivered: true }))
-    },
+    onAccepted: (): void => { contextPending.current?.accepted() },
     // 内容身份（Delivery_05）：首条消息摘要落为 topic（sticky——已有
     // topic 不再覆盖）。body 是干净用户文本（快照前缀不进 body）。
     onSubmitText: (body: string): void => {
@@ -520,9 +461,17 @@ export function SideChatPanel(props: TabComponentProps & { reflow: ReflowStore; 
     return <div ref={rootRef} className={css.root} data-sidechat-native-conversation data-sidechat-chat-session={childId} data-sidechat-parent-session={meta.parentSessionId ?? scope.sessionId} data-sidechat-view-title={tab.title}>
       <div className={css.parentStrip}>{t('menuTitle')} · {t('nativeConversationMode')}
         <button type="button" className={css.headerSide} onClick={() => { if (meta.parentSessionId !== undefined) ctx.sessions.open(meta.parentSessionId) }}>{t('mainConversation')}</button>
+        <button type="button" className={css.headerSide} disabled={snapshot?.running === true || !messages.some(m => m.role === 'assistant' && m.text.trim() !== '' && (meta.boundarySeq === undefined || (m.seq ?? -1) > meta.boundarySeq))} onClick={() => {
+          const answer = [...messages].reverse().find(m => m.role === 'assistant' && m.text.trim() !== '' && (meta.boundarySeq === undefined || (m.seq ?? -1) > meta.boundarySeq))
+          if (answer === undefined) return
+          const index = messages.indexOf(answer)
+          const question = messages.slice(0, index).reverse().find(m => m.role === 'user')?.text
+          props.reflow.add(meta.parentSessionId ?? scope.sessionId, tab.title, answer.text, question === undefined ? undefined : stripSideProtocolBlocks(question))
+          showToast(t('reflowDone'))
+        }}>{t('reflowToMain')}</button>
       </div>
-      <Provider session={nativeReference}>{props.nativeConversation.renderSlot('dsh-sidechat.conversation', {})}</Provider>
-      {childId !== undefined && <NativeBoundaryInterceptor ctx={ctx} childId={childId} scopeSessionId={scope.sessionId} tabId={tab.id} metaRef={tabMetaRef} visible={visible} />}
+      <div className={css.nativeConversationBody}><Provider session={nativeReference}>{props.nativeConversation.renderSlot('dsh-sidechat.conversation', {})}</Provider></div>
+
     </div>
   }
 

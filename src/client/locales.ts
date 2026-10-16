@@ -175,7 +175,7 @@ export const en = {
   hintClose: 'Got it',
 
   // 回流通道（侧边 → 主会话）
-  reflowToMain: 'Send back to main session',
+  reflowToMain: 'Add to Conversation',
   reflowFrom: 'From side chat ({title}):',
   reflowDone: 'Added above the main composer',
   reflowFailed: "Couldn't reach the main session",
@@ -390,7 +390,7 @@ export const zh: Record<CopyKey, string> = {
   hintText: '小技巧：划选回复里的文字，可以加注解或在侧边提问',
   hintClose: '知道了',
 
-  reflowToMain: '回流到主会话',
+  reflowToMain: '添加到主对话',
   reflowFrom: '来自侧边聊天（{title}）：',
   reflowDone: '已回流到主会话输入框上方',
   reflowFailed: '主会话不可达',

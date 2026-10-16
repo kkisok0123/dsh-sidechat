@@ -42,6 +42,7 @@ export interface SideChatMetaRecord {
     readonly leakedPromptPrefix?: string;
     /** 侧聊边界块已随首条消息投递（Codex 对齐）；一次性标记。 */
     readonly boundaryDelivered?: boolean;
+    readonly contextThroughSeq?: number;
     /** 遗传 turn 已中和（cancel + 边界覆盖完成）。 */
     readonly inheritedPurged?: boolean;
     /** 内容身份（Delivery_05）：首条用户消息摘要，sticky。 */

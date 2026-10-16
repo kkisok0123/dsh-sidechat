@@ -70,6 +70,8 @@ export interface SideChatMeta {
   /** 侧聊边界块已随首条消息投递（Codex 对齐）；缺省 = 待投递。
    *  一次性标记：接受后置 true，此后不再重复拼接。 */
   boundaryDelivered?: boolean
+  /** Parent event cursor, advanced only after a side prompt is admitted. */
+  contextThroughSeq?: number
   /** 遗传 turn 已中和（cancel + 折叠边界已覆盖）；缺省 = 未监护。 */
   inheritedPurged?: boolean
   /** 内容身份（Delivery_05）：首条用户消息摘要，sticky——只在首条
@@ -93,6 +95,7 @@ export function parseSideChatMeta(meta: unknown): SideChatMeta {
   if (raw.snapshotOnly === true) out.snapshotOnly = true
   if (typeof raw.leakedPromptPrefix === 'string' && raw.leakedPromptPrefix !== '') out.leakedPromptPrefix = raw.leakedPromptPrefix
   if (raw.boundaryDelivered === true) out.boundaryDelivered = true
+  if (typeof raw.contextThroughSeq === 'number' && Number.isFinite(raw.contextThroughSeq)) out.contextThroughSeq = raw.contextThroughSeq
   if (raw.inheritedPurged === true) out.inheritedPurged = true
   if (typeof raw.topic === 'string' && raw.topic !== '') out.topic = raw.topic
   return out

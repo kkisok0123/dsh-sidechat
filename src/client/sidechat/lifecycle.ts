@@ -501,6 +501,7 @@ export function updateTabMeta(ctx: Context, sessionId: string, tabId: string, mu
       ...(next.snapshotOnly === true ? { snapshotOnly: true } : {}),
       ...(next.leakedPromptPrefix !== undefined ? { leakedPromptPrefix: next.leakedPromptPrefix } : {}),
       ...(next.boundaryDelivered === true ? { boundaryDelivered: true } : {}),
+      ...(next.contextThroughSeq !== undefined ? { contextThroughSeq: next.contextThroughSeq } : {}),
       ...(next.inheritedPurged === true ? { inheritedPurged: true } : {}),
       ...(next.topic !== undefined ? { topic: next.topic } : {}),
       number: direct.number,

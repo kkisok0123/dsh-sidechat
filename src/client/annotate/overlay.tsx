@@ -18,6 +18,7 @@ import { IconCheckOutline16, IconTrashOutline16 } from '../host/icons.ts'
 import type { Context } from '../host/contracts.ts'
 import { currentSessionIdOf } from '../host/currentSession.ts'
 import { hostDiagnostics } from '../host/probes.ts'
+import { observeConversationSizes } from '../host/geometry.ts'
 import { probeInput } from '../host/input.ts'
 import { focusConversationComposer, focusSideConversationComposer } from '../host/dom.ts'
 import { sideChatBridge, type SideChatBridge } from '../bridge.ts'
@@ -104,7 +105,10 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
   const [, setGeometryTick] = useState(0)
   const rangeCache = useRef(new Map<number, CachedRange>())
 
+  const hasGeometry = selectionState.selection !== null || editor !== null || sideDraft !== null
+    || store.sessions().some(id => store.list(id).some(annotation => annotation.kind !== 'selected-text'))
   useEffect(() => {
+    if (!hasGeometry) return
     let raf = 0
     let debounce = 0
     const bumpNow = (): void => {
@@ -136,16 +140,24 @@ function AnnotateOverlayInner({ ctx, store, controller }: OverlayProps): ReactNo
     } catch {
       // document.body missing (pre-mount teardown) — badges just stay put.
     }
+    // Pane drags do not emit window.resize; observe their actual boxes. Image
+    // decode can move anchors without a DOM mutation or a window resize.
+    const stopSizes = observeConversationSizes(bumpNow)
+    const onLoad = (event: Event): void => { if (event.target instanceof HTMLImageElement) bumpNow() }
     window.addEventListener('resize', bumpNow)
     document.addEventListener('scroll', bumpNow, true)
+    document.addEventListener('load', onLoad, true)
+    bumpNow()
     return () => {
       observer.disconnect()
+      stopSizes()
       window.removeEventListener('resize', bumpNow)
       document.removeEventListener('scroll', bumpNow, true)
+      document.removeEventListener('load', onLoad, true)
       if (raf !== 0) window.cancelAnimationFrame(raf)
       if (debounce !== 0) window.clearTimeout(debounce)
     }
-  }, [])
+  }, [hasGeometry, currentSessionId])
 
   const selection = selectionState.selection
 
