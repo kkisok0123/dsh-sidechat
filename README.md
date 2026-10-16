@@ -52,4 +52,8 @@ pnpm check:package
 
 ## 来源与许可
 
-基于 [gyixuan 的 dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote)，保留原作者署名和 MIT 许可。本仓库从独立源码快照建立，未继承原 Git 提交历史。
+本插件基于 [gyixuan 的 dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote) 改进。感谢原作者提供侧边聊天、划选注释及回流能力的基础实现。本项目不是从零原创，也不是上游官方发行版。
+
+本分支主要改进了宿主原生会话渲染、侧聊边界协议、划选后直接在侧聊提问、模型切换与输入焦点恢复，以及 DSH 0.2.1-alpha.4 兼容性。具体功能和限制见上文。
+
+保留原作者 `Copyright (c) 2026 gyixuan` 与完整 [MIT 许可](LICENSE)。本仓库从独立源码快照建立，未继承原 Git 提交历史；后续改进由本仓库维护者负责。

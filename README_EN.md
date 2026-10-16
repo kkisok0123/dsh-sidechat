@@ -52,4 +52,8 @@ Commit the corresponding `lib/` files whenever source changes. CI rebuilds and c
 
 ## Origin and license
 
-Based on [gyixuan's dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote), retaining the original attribution and MIT license. This repository starts from an independent source snapshot without the upstream Git history.
+This plugin is an improved derivative of [gyixuan's dsh-sidenote](https://github.com/g-yixuan/dsh-sidenote). Thank you to the original author for the side-chat, selection-annotation and handback foundations. This project is not an original implementation from scratch or an official upstream release.
+
+This branch adds native host conversation rendering, explicit side-conversation boundaries, direct selection-to-side-chat questions, model-switch focus restoration, and DSH 0.2.1-alpha.4 compatibility. See the features and limitations above.
+
+The original `Copyright (c) 2026 gyixuan` and full [MIT license](LICENSE) are preserved. This repository starts from an independent source snapshot without upstream Git history; its maintainer is responsible for subsequent changes.
